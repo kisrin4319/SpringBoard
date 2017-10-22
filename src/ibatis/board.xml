@@ -27,19 +27,14 @@
 		
 		<select id="searchBoard" parameterClass="java.util.HashMap" resultClass="BoardModel">
 			select b.idx, b.writer,b.subject,
+			b.content,b.hitcount,b.recommendcount, to_char(b.writedate,'YYYY-MM-DD HH:MI:SS') writeDate,
+			count(c.idx) as "comment", b.writerId,b.fileName,b.rnum
+			from (select a.idx,a.writer,a.subject, a.content,a.hitcount,a.recommendcount, a.writedate,a.writerId,a.fileName,rownum rnum
+			from (select idx,writer,subject,content,hitcount,recommendcount, writedate,writerId,fileName from board where $type$ like '%$keyword$%' order by idx desc) a ) b left outer join boardcomment c on b.idx = c.boardidx
+			where rnum between #startArticleNum# and #endArticleNum# group by
+			b.idx, b.writer,b.subject,
 			b.content,b.hitcount,b.recommendcount,
-			to_char(b.writedate,'YYYY-MM-DD HH:MI:SS') writeDate,
-			count(c.idx) as "comment",
-			b.writerId,b.fileName,b.rnum
-			from (select a.idx,a.writer,a.subject,
-						 a.content,a.hitcount,a.recommendcount,
-						 a.writedate,a.writerId,a.fileName,rownum rnum
-			from (select idx,writer,subject,content,hitcount,recommendcount,
-						 writedate,writerId,fileName from board where $type$ like '%$keyword$%' order by idx desc) a ) b left outer join boardcomment c on b.idx = c.boardidx
-						 where rnum between #startArticleNum# and #endArticleNum# group by
-						 b.idx, b.writer, b.recommendcount,
-						 b.writedate,b.rnum,b.writerId,b.fileName
-						 order by b.idx desc
+			b.writedate,b.rnum,b.writerId,b.fileName order by b.idx desc
 		</select>
 		
 		<select id="SelectOneBoard" parameterClass="int" resultClass="BoardModel">
@@ -69,7 +64,7 @@
 		</update>
 		
 		<update id="updateRecommendcount" parameterClass="java.util.HashMap">
-			update board set recommentcount = #recommendcount# where idx = #idx#
+			update board set recommendcount = #recommendcount# where idx = #idx#
 		</update>
 		
 		<update id="modifyBoard" parameterClass="BoardModel">
