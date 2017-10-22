@@ -1,0 +1,92 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE sqlMap PUBLIC '-//ibatis.apache.org//DTD Sql Map 2.0//EN' 'http://ibatis.apache.org/dtd/sql-map-2.dtd'>
+<sqlMap namespace="board">
+
+	<typeAlias alias="BoardModel" type="board.model.BoardModel" />
+	<typeAlias alias="BoardCommentModel" type="board.model.BoardCommentModel"/>
+	
+	
+	<select id="SelectAllBoard" parameterClass="java.util.HashMap" resultClass="BoardModel">
+			SELECT b.idx,b.writer,b.subject,b.content,b.hitcount,b.recommendcount,to_char(b.writedate, 'YYYY-MM-DD HH:MI:SS') writeDate,
+			count(c.idx) as "comment",b.writerId,b.fileName,b.rnum
+			from (select a.idx, a.writer,a.subject,a.content,a.hitcount,a.recommendcount,a.writedate,a.writerId,a.fileName,rownum rnum 
+			from (select idx,writer,subject,content,hitcount,recommendcount,writedate,writerId,fileName from board order by idx desc) a) b left outer join boardcomment c on b.idx = c.boardidx
+			where rnum between #startArticleNum# and #endArticleNum# group by
+			b.idx, b.writer, b.subject,
+			b.content,b.hitcount,b.recommendcount,
+			b.writedate,b.rnum,b.writerId,b.fileName order by b.idx desc
+		</select>
+		
+		<select id="TotalNum" resultClass="int">
+			select count(idx) from board
+		</select>
+		
+		<select id="SearchTotalNum" resultClass="int">
+			select count(idx) from board where $type$ like '%$keyword$%'		
+		</select>
+		
+		<select id="searchBoard" parameterClass="java.util.HashMap" resultClass="BoardModel">
+			select b.idx, b.writer,b.subject,
+			b.content,b.hitcount,b.recommendcount,
+			to_char(b.writedate,'YYYY-MM-DD HH:MI:SS') writeDate,
+			count(c.idx) as "comment",
+			b.writerId,b.fileName,b.rnum
+			from (select a.idx,a.writer,a.subject,
+						 a.content,a.hitcount,a.recommendcount,
+						 a.writedate,a.writerId,a.fileName,rownum rnum
+			from (select idx,writer,subject,content,hitcount,recommendcount,
+						 writedate,writerId,fileName from board where $type$ like '%$keyword$%' order by idx desc) a ) b left outer join boardcomment c on b.idx = c.boardidx
+						 where rnum between #startArticleNum# and #endArticleNum# group by
+						 b.idx, b.writer, b.recommendcount,
+						 b.writedate,b.rnum,b.writerId,b.fileName
+						 order by b.idx desc
+		</select>
+		
+		<select id="SelectOneBoard" parameterClass="int" resultClass="BoardModel">
+			select idx, writer, subject, content,hitcount,recommendcount,writedate,writerId,fileName from board where idx = #idx#
+		</select>
+		
+		<select id="SelectAllComment" parameterClass="int" resultClass="BoardCommentModel">
+			select idx, writer,content,writeDate,boardidx,writerId from boardcomment where boardidx=#idx# order by idx desc
+		</select>
+		
+		<select id="SelectOneComment" parameterClass="int" resultClass="BoardCommentModel">
+			select idx, writer, content, writeDate, boardidx, writerId from boardcomment where idx = #idx#
+		</select>
+		
+		<insert id="writeBoard" parameterClass="BoardModel">
+			insert into board(idx,writer,subject,content,hitcount,recommendcount, writeDate,writerId, fileName)
+			values (boardseq.nextval,#writer#,#subject#,#content#,0,0,sysdate,#writerId#,#fileName#)
+		</insert>
+		
+		<insert id="writeComment" parameterClass="BoardCommentModel">
+			insert into boardcomment(idx, writer, content, writeDate, boardidx, writerId)
+			values(COMMENTSEQ.nextVal, #writer#, #content#, sysdate, #boardidx#, #writerId#)
+		</insert>
+		
+		<update id="updateHitcount" parameterClass="java.util.HashMap">
+			update board set hitcount = #hitcount# where idx = #idx#
+		</update>
+		
+		<update id="updateRecommendcount" parameterClass="java.util.HashMap">
+			update board set recommentcount = #recommendcount# where idx = #idx#
+		</update>
+		
+		<update id="modifyBoard" parameterClass="BoardModel">
+			update board set subject = #subject#,
+							 content = #content#,
+							 fileName = #fileName#
+						 where idx = #idx#
+		</update>
+		
+		<delete id="deleteComment" parameterClass="int">
+			delete from boardcomment where idx = #idx#
+		</delete>
+		
+		<delete id="deleteBoard" parameterClass="int">
+			delete from board where idx = #idx#
+		</delete>
+		
+</sqlMap>
+
+
