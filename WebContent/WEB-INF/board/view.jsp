@@ -51,7 +51,12 @@
 				location.href = "recommend.do?idx=${board.idx}";
 			}
 			break;
-		}
+		case 5:
+			if(confirm("첨부파일을 받으시겠습니까?")){
+				location.href = "download?fileName=${board.fileName}";
+			}
+			break;
+	}
 	}
 </script>
 </head>
@@ -81,7 +86,7 @@
 			<tr>
 				<td colspan="4" align="left">
 					<span class="date">첨부파일:&nbsp;
-						<a href="<%=request.getContextPath()%>/files/${board.fileName}" target="_blank">${board.fileName}</a>
+						<a href="download.do?fileName=${board.fileName}" target ="_blank">${board.fileName}</a>
 					</span>
 				</td>
 			</tr>

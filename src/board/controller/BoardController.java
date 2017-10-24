@@ -7,12 +7,16 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 import javax.servlet.http.HttpSession;
 
+import org.springframework.beans.BeansException;
 import org.springframework.context.ApplicationContext;
+import org.springframework.context.ApplicationContextAware;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import org.springframework.stereotype.Controller;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestMethod;
+import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.multipart.MultipartHttpServletRequest;
 import org.springframework.web.servlet.ModelAndView;
@@ -23,8 +27,9 @@ import board.service.BoardService;
 
 @Controller
 @RequestMapping("/board")
-public class BoardController {
+public class BoardController implements ApplicationContextAware {
 
+	private WebApplicationContext webcontext = null;
 	//DI
 	private ApplicationContext context = new ClassPathXmlApplicationContext("/config/applicationContext.xml");
 	private BoardService boardService = (BoardService) context.getBean("boardService");
@@ -176,6 +181,7 @@ public class BoardController {
 		MultipartFile file = request.getFile("file");
 		String fileName = file.getOriginalFilename();
 		File uploadFile = new File(uploadPath+fileName);
+		System.out.println(uploadFile);
 		//when file exists as same name
 		if(uploadFile.exists()) {
 			fileName = new Date().getTime() + fileName;
@@ -334,5 +340,18 @@ public class BoardController {
 		mv.addObject("idx",idx);
 		mv.setViewName("redirect:/board/view.do");
 		return mv;
+	}
+	
+	@RequestMapping("/download")
+	public ModelAndView download(@RequestParam("fileName") String FileName) throws Exception {
+		String path = "C:\\Java\\Workspace\\SpringBoard\\WebContent\\files\\";
+		File file = new File(path+FileName);
+		return new ModelAndView("download","downloadFile",file);
+	}
+
+	@Override
+	public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+		this.webcontext = (WebApplicationContext) applicationContext;
+		
 	}
 	}

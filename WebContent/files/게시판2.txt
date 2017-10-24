@@ -1,0 +1,1949 @@
+﻿**MVC 게시판 + 로그인/로그아웃/회원가입의 전체 동작 로직**
+ : 게시판에 검색 + 댓글로직 추가.
+ : 회원가입에 우편번호 로직 추가.
+
+[[[ControllerUsingURI]]] <==== commandHandlerURI.properties
+            ||
+/MVC/list.do=ssol.action.ListAction ===> list.jsp
+/MVC/writeForm.do=ssol.action.WriteFormAction ===> writeForm.jsp
+/MVC/writePro.do=ssol.action.WriteProAction ===> writePro.jsp
+/MVC/content.do=ssol.action.ContentAction ===> content.jsp
+/MVC/updateForm.do=ssol.action.UpdateFormAction ===> updateForm.jsp
+/MVC/updatePro.do=ssol.action.UpdateProAction ===> updatePro.jsp
+/MVC/deleteForm.do=ssol.action.DeleteFormAction ===> deleteForm.jsp
+/MVC/deletePro.do=ssol.action.DeleteProAction ===> deletePro.jsp
+
+/logon/main.do=ssol.action.LogonMainAction ===> main.jsp
+/logon/inputForm.do=ssol.action.LogonInputFormAction ===> inputForm.jsp
+/logon/inputPro.do=ssol.action.LogonInputProAction ===> inputPro.jsp
+/logon/confirmId.do=ssol.action.ConfirmIdAction ===> confirmId.jsp
+/logon/loginForm.do=ssol.action.LoginFormAction ===> loginForm.jsp
+/logon/loginPro.do=ssol.action.LoginProAction ===> loginPro.jsp
+/logon/logout.do=ssol.action.LogoutAction ===> logout.jsp
+/logon/modify.do=ssol.action.LogonModifyAction ===> modify.jsp
+/logon/modifyForm.do=ssol.action.LogonModifyFormAction ===> modifyForm.jsp
+/logon/modifyPro.do=ssol.action.LogonModifyProAction ===> modifyPro.jsp
+/logon/deleteForm.do=ssol.action.LogonDeleteFormAction ===> deleteForm.jsp
+/logon/deletePro.do=ssol.action.LogonDeleteProAction ===> deletePro.jsp
+
+http://localhost:8080/SSOL/MVC/list.do
+1. *.do(web.xml) =====> ControllerUsingURI2(Controller) <=== commandHandlerURI.properties
+2. /MVC/list.do =====> ssol.action.ListAction(BoardDataBean, BoardDBBean)
+3. list.jsp(EL,JSTL)
+
+*****게시판만들기*****
+1.패턴 : Model2(MVC)
+
+
+2.Table : board
+   Sequence : board_num
+  
+3.JavaBean
+  : 저장빈 : soldesk.board.BoardDataBean
+  : 처리빈 : soldesk.board.BoardDBBean
+ 
+4.commandHandlerURI.properties작성
+/MVC/list.do=ssol.action.ListAction
+/MVC/writeForm.do=ssol.action.WriteFormAction
+/MVC/writePro.do=ssol.action.WriteProAction
+/MVC/content.do=ssol.action.ContentAction
+/MVC/updateForm.do=ssol.action.UpdateFormAction
+/MVC/updatePro.do=ssol.action.UpdateProAction
+/MVC/deleteForm.do=ssol.action.DeleteFormAction
+/MVC/deletePro.do=ssol.action.DeleteProAction
+
+5.Controller
+[ControllerUsingURI2.java]
+package ssol.controller;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.action.CommandAction;
+import ssol.action.NullAction;
+
+public class ControllerUsingURI2 extends HttpServlet {
+   
+    private Map commandMap = new HashMap();//명령어와 명령어 처리 클래스를 쌍으로 저장
+
+    //명령어와 처리클래스가 매핑되어 있는 properties 파일을 읽어서 Map객체인 commandMap에 저장
+    //명령어와 처리클래스가 매핑되어 있는 properties 파일은 Command.properties파일
+    public void init(ServletConfig config) throws ServletException {
+	
+        String props = config.getInitParameter("configFile2");//web.xml에서 propertyConfig에 해당하는 init-param 의 값을 읽어옴
+        Properties pr = new Properties();//명령어와 처리클래스의 매핑정보를 저장할 Properties객체 생성
+        FileInputStream f = null;
+        try {
+            String configFilePath = config.getServletContext().getRealPath(
+					props);		
+            f = new FileInputStream(configFilePath); //Command.properties파일의 내용을 읽어옴
+            pr.load(f);//Command.properties파일의 정보를  Properties객체에 저장
+        } catch (IOException e) {
+            throw new ServletException(e);
+        } finally {
+            if (f != null) try { f.close(); } catch(IOException ex) {}
+        }
+        Iterator keyIter = pr.keySet().iterator();//Iterator객체는 Enumeration객체를 확장시킨 개념의 객체
+        while( keyIter.hasNext() ) {//객체를 하나씩 꺼내서 그 객체명으로 Properties객체에 저장된 객체에 접근
+            String command = (String)keyIter.next();
+            String className = pr.getProperty(command);
+            try {
+                Class commandClass = Class.forName(className);//해당 문자열을 클래스로 만든다.
+                Object commandInstance = commandClass.newInstance();//해당클래스의 객체를 생성
+                commandMap.put(command, commandInstance);// Map객체인 commandMap에 객체 저장
+            } catch (ClassNotFoundException e) {
+                throw new ServletException(e);
+            } catch (InstantiationException e) {
+                throw new ServletException(e);
+            } catch (IllegalAccessException e) {
+                throw new ServletException(e);
+            }
+        }
+    }
+
+    public void doGet(//get방식의 서비스 메소드
+        HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+        requestPro(request, response);
+    }
+
+    protected void doPost(//post방식의 서비스 메소드
+        HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+        requestPro(request, response);
+    }
+
+    //시용자의 요청을 분석해서 해당 작업을 처리
+    private void requestPro(HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+	String view = null;
+        CommandAction com=null;
+	try {
+            String command = request.getRequestURI();
+            if (command.indexOf(request.getContextPath()) == 0) {
+               command = command.substring(request.getContextPath().length());
+            }
+            com = (CommandAction)commandMap.get(command); 
+	    if (com == null) {
+		com = new NullAction();
+	    }
+            view = com.requestPro(request, response);
+        } catch(Throwable e) {
+            throw new ServletException(e);
+        }  
+        RequestDispatcher dispatcher =request.getRequestDispatcher(view);
+        dispatcher.forward(request, response);
+    }
+}
+
+[web.xml] : 기존거는 삭제
+<servlet>
+	<servlet-name>ControllerUsingURI</servlet-name>
+	<servlet-class>ssol.controller.ControllerUsingURI2</servlet-class>
+	<init-param>
+		<param-name>configFile2</param-name>
+		<param-value>/WEB-INF/commandHandlerURI.properties</param-value>
+	</init-param>
+  </servlet>
+	
+  <servlet-mapping>
+	<servlet-name>ControllerUsingURI</servlet-name>
+	<url-pattern>*.do</url-pattern>
+  </servlet-mapping>
+
+6.Action class
+[CommandAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+//요청 파라미터로 명령어를 전달하는 방식의 슈퍼 인터페이스
+public interface CommandAction {
+    public String requestPro(HttpServletRequest request, HttpServletResponse response)throws Throwable;
+}
+
+[NullAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class NullAction implements CommandAction {
+
+	@Override
+	public String requestPro(HttpServletRequest request,
+			HttpServletResponse response) throws Throwable {
+		return "/view/nullCommand.jsp";
+	}
+
+}
+
+[ListAction.java]
+package ssol.action;
+
+import java.util.Collections;
+import java.util.List;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.board.BoardDBBean;
+
+public class ListAction implements CommandAction {//글목록 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+       
+        String pageNum = request.getParameter("pageNum");//페이지 번호
+
+        if (pageNum == null) {
+            pageNum = "1";
+        }
+        int pageSize = 10;//한 페이지의 글의 개수
+        int currentPage = Integer.parseInt(pageNum);
+        int startRow = (currentPage - 1) * pageSize + 1;//한 페이지의 시작글 번호
+        int endRow = currentPage * pageSize;//한 페이지의 마지막 글번호
+        int count = 0;
+        int number=0;
+
+        List articleList = null;
+        BoardDBBean dbPro = BoardDBBean.getInstance();//DB연동
+        count = dbPro.getArticleCount();//전체 글의 수
+       
+        if (count > 0) {
+            articleList = dbPro.getArticles(startRow, endRow);//현재 페이지에 해당하는 글 목록
+        } else {
+            articleList = Collections.EMPTY_LIST;
+        }
+
+	number=count-(currentPage-1)*pageSize;//글목록에 표시할 글번호
+        //해당 뷰에서 사용할 속성
+        request.setAttribute("currentPage", new Integer(currentPage));
+        request.setAttribute("startRow", new Integer(startRow));
+        request.setAttribute("endRow", new Integer(endRow));
+        request.setAttribute("count", new Integer(count));
+        request.setAttribute("pageSize", new Integer(pageSize));
+	request.setAttribute("number", new Integer(number));
+        request.setAttribute("articleList", articleList);
+       
+        return "/MVC/list.jsp";//해당 뷰
+    }
+}
+
+[WriteFormAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class WriteFormAction implements CommandAction {//글 입력 폼 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+       //제목글과 답변글의 구분
+        int num=0,ref=1,re_step=0,re_level=0; 
+        try{ 
+          if(request.getParameter("num")!=null){
+		 num=Integer.parseInt(request.getParameter("num"));
+		 ref=Integer.parseInt(request.getParameter("ref"));
+		 re_step=Integer.parseInt(request.getParameter("re_step"));
+		 re_level=Integer.parseInt(request.getParameter("re_level"));
+	   }
+	}catch(Exception e){e.printStackTrace();}
+		//해당 뷰에서 사용할 속성
+		request.setAttribute("num", new Integer(num));
+		request.setAttribute("ref", new Integer(ref));
+		request.setAttribute("re_step", new Integer(re_step));
+		request.setAttribute("re_level", new Integer(re_level));
+
+		return "/MVC/writeForm.jsp";//해당 뷰
+	}
+}
+
+[WriteProAction.java]
+package ssol.action;
+
+import java.sql.Timestamp;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.board.BoardDataBean;
+import soldesk.board.BoardDBBean;
+
+public class WriteProAction implements CommandAction {// 입력된 글 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)  throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");//한글 인코딩
+       
+        BoardDataBean article = new BoardDataBean();//데이터처리 빈
+	article.setNum(Integer.parseInt(request.getParameter("num")));
+        article.setWriter(request.getParameter("writer"));
+        article.setEmail(request.getParameter("email"));
+        article.setSubject(request.getParameter("subject"));
+        article.setPasswd(request.getParameter("passwd"));
+        article.setReg_date(new Timestamp(System.currentTimeMillis()));
+	article.setRef(Integer.parseInt(request.getParameter("ref")));
+	article.setRe_step(Integer.parseInt(request.getParameter("re_step")));
+	article.setRe_level(Integer.parseInt(request.getParameter("re_level")));
+	article.setContent(request.getParameter("content"));
+	article.setIp(request.getRemoteAddr());
+
+        BoardDBBean dbPro = BoardDBBean.getInstance();//DB처리
+        dbPro.insertArticle(article);
+
+        return "/MVC/writePro.jsp";
+    }
+}
+
+[ContentAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.board.BoardDataBean;
+import soldesk.board.BoardDBBean;
+
+public class ContentAction implements CommandAction {//글내용 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+       
+        int num = Integer.parseInt(request.getParameter("num"));//해당 글번호
+        String pageNum = request.getParameter("pageNum");//해당 페이지 번호
+
+        BoardDBBean dbPro = BoardDBBean.getInstance();//DB처리
+        BoardDataBean article =  dbPro.getArticle(num);//해당 글번호에 대한 해당 레코드
+ 
+        //해당 뷰에서 사용할 속성
+        request.setAttribute("num", new Integer(num));
+        request.setAttribute("pageNum", new Integer(pageNum));
+        request.setAttribute("article", article);
+       
+        return "/MVC/content.jsp";//해당 뷰
+    }
+}
+
+[UpdateFormAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.board.BoardDataBean;
+import soldesk.board.BoardDBBean;
+
+public class UpdateFormAction implements CommandAction {//글수정 폼
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        int num = Integer.parseInt(request.getParameter("num"));
+        String pageNum = request.getParameter("pageNum");
+
+        BoardDBBean dbPro = BoardDBBean.getInstance();
+        BoardDataBean article =  dbPro.updateGetArticle(num);
+
+	//해당 뷰에서 사용할 속성
+        request.setAttribute("pageNum", new Integer(pageNum));
+        request.setAttribute("article", article);
+
+        return "/MVC/updateForm.jsp";//해당뷰
+    }
+}
+
+[UpdateProAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.board.BoardDataBean;
+import soldesk.board.BoardDBBean;
+
+public class UpdateProAction implements CommandAction {
+
+    public String requestPro( HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");
+
+        String pageNum = request.getParameter("pageNum");
+
+	BoardDataBean article = new BoardDataBean();
+        article.setNum(Integer.parseInt(request.getParameter("num")));
+        article.setWriter(request.getParameter("writer"));
+        article.setEmail(request.getParameter("email"));
+        article.setSubject(request.getParameter("subject"));
+        article.setContent(request.getParameter("content"));
+        article.setPasswd(request.getParameter("passwd"));
+   
+	BoardDBBean dbPro = BoardDBBean.getInstance();
+        int check = dbPro.updateArticle(article);
+
+        request.setAttribute("pageNum", new Integer(pageNum));
+        request.setAttribute("check", new Integer(check));
+
+        return "/MVC/updatePro.jsp";
+    }
+}
+
+[DeleteFormAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class DeleteFormAction implements CommandAction {//글삭제 폼
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        int num = Integer.parseInt(request.getParameter("num"));
+        String pageNum = request.getParameter("pageNum");
+
+	//해당 뷰에서 사용할 속성
+	request.setAttribute("num", new Integer(num));
+        request.setAttribute("pageNum", new Integer(pageNum));
+
+        return "/MVC/deleteForm.jsp";//해당뷰
+    }
+}
+
+[DeleteProAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.board.BoardDBBean;
+
+public class DeleteProAction implements CommandAction {//글삭제
+
+    public String requestPro( HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");
+
+        int num = Integer.parseInt(request.getParameter("num"));
+        String pageNum = request.getParameter("pageNum");
+        String passwd = request.getParameter("passwd");
+   
+        BoardDBBean dbPro = BoardDBBean.getInstance();
+        int check = dbPro.deleteArticle(num, passwd);
+
+        //해당 뷰에서 사용할 속성
+        request.setAttribute("pageNum", new Integer(pageNum));
+        request.setAttribute("check", new Integer(check));
+
+        return "/MVC/deletePro.jsp";//해당뷰
+    }
+}
+
+7.JSP
+[/WebContent/MVC/script.js]
+function writeSave(){
+
+if(document.writeform.writer.value==""){
+  alert("작성자를 입력하십시요.");
+  document.writeform.writer.focus();
+  return false;
+}
+if(document.writeform.subject.value==""){
+  alert("제목을 입력하십시요.");
+  document.writeform.subject.focus();
+  return false;
+}
+
+if(document.writeform.content.value==""){
+  alert("내용을 입력하십시요.");
+  document.writeform.content.focus();
+  return false;
+}
+       
+if(document.writeform.passwd.value==""){
+  alert(" 비밀번호를 입력하십시요.");
+  document.writeform.passwd.focus();
+  return false;
+}
+}   
+
+[/WebContent/MVC/style.css]
+BODY {
+	FONT-SIZE: 9pt; COLOR: black; LINE-HEIGHT: 160%; FONT-FAMILY: 굴림,verdana,tahoma
+}
+TD {
+	FONT-SIZE: 9pt; COLOR: black; LINE-HEIGHT: 160%; FONT-FAMILY: 굴림,verdana,tahoma
+}
+SELECT {
+	FONT-SIZE: 9pt; COLOR: black; LINE-HEIGHT: 160%; FONT-FAMILY: 굴림,verdana,tahoma
+}
+DIV {
+	FONT-SIZE: 9pt; COLOR: black; LINE-HEIGHT: 160%; FONT-FAMILY: 굴림,verdana,tahoma
+}
+FORM {
+	FONT-SIZE: 9pt; COLOR: black; LINE-HEIGHT: 160%; FONT-FAMILY: 굴림,verdana,tahoma
+}
+TEXTAREA {
+	BORDER-RIGHT: 1px solid #999999; BORDER-TOP: 1px solid #999999; FONT-SIZE: 9pt; BORDER-LEFT: 1px solid #999999 ; COLOR: BLACK; BORDER-BOTTOM: 1px solid #999999; FONT-FAMILY: 굴림,verdana; BACKGROUND-COLOR: white
+}
+INPUT {
+	BORDER-RIGHT: 1px solid #999999; BORDER-TOP: 1px solid #999999; FONT-SIZE: 9pt; BORDER-LEFT: 1px solid #999999; COLOR: BLACK; BORDER-BOTTOM: 1px solid #999999; FONT-FAMILY: 굴림,verdana; HEIGHT: 19px; BACKGROUND-COLOR: white
+}
+
+A:link {text-decoration:none;color:#696969}
+A:hover{text-decoration:yes;color:#66CCFF}
+A:visited {text-decoration:none;color:#330066}
+
+[/WebContent/MVC/color.jspf]
+<c:set var="bodyback_c" value="#e0ffff"/>
+<c:set var="back_c" value="#8fbc8f"/>
+<c:set var="title_c" value="#5f9ea0"/>
+<c:set var="value_c" value="#b0e0e6"/>
+<c:set var="bar" value="#778899"/>
+
+[writeForm.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="color.jspf"%>
+
+<html>
+<head>
+<title>게시판</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" src="script.js"></script>
+</head>
+
+  
+<body bgcolor="${bodyback_c}"> 
+<center><b>글쓰기</b>
+<br>
+<form method="post" name="writeform" action="/SSOL/MVC/writePro.do" onsubmit="return writeSave()">
+<input type="hidden" name="num" value="${num}">
+<input type="hidden" name="ref" value="${ref}">
+<input type="hidden" name="re_step" value="${re_step}">
+<input type="hidden" name="re_level" value="${re_level}">
+
+<table width="400" border="1" cellspacing="0" cellpadding="0"  align="center">
+   <tr>
+    <td align="right" colspan="2" bgcolor="${value_c}">
+    <a href="/SSOL/MVC/list.do"> 글목록</a>
+   </td>
+   </tr>
+   <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center">이 름</td>
+    <td  width="330">
+       <input type="text" size="10" maxlength="10" name="writer"></td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center" >제 목</td>
+    <td  width="330">
+<c:if test="${num == 0}">
+       <input type="text" size="40" maxlength="50" name="subject"></td>
+</c:if>
+<c:if test="${num != 0}">
+   <input type="text" size="40" maxlength="50" name="subject" value="[답변]"></td>
+</c:if>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center">Email</td>
+    <td  width="330">
+       <input type="text" size="40" maxlength="30" name="email" ></td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center" >내 용</td>
+    <td  width="330" >
+     <textarea name="content" rows="13" cols="40"></textarea> </td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center" >비밀번호</td>
+    <td  width="330" >
+     <input type="password" size="8" maxlength="12" name="passwd">
+</td>
+  </tr>
+<tr>     
+<td colspan=2 bgcolor="${value_c}" align="center">
+  <input type="submit" value="글쓰기" > 
+  <input type="reset" value="다시작성">
+  <input type="button" value="목록보기" OnClick="window.location='/SSOL/MVC/list.do'">
+</td></tr></table>   
+</form>     
+</body>
+</html>      
+
+[writePro.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+
+<meta http-equiv="Refresh" content="0;url=/SSOL/MVC/list.do" >
+
+[list.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ taglib prefix="fmt" uri="http://java.sun.com/jsp/jstl/fmt" %>
+<%@ include file="color.jspf"%>
+
+<html>
+<head>
+<title>게시판</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+</head>
+
+<body bgcolor="${bodyback_c}">
+<center><b>글목록(전체 글:${count})</b>
+<table width="700">
+  <tr>
+    <td align="right" bgcolor="${value_c}">
+       <a href="/SSOL/MVC/writeForm.do">글쓰기</a>
+    </td>
+  </tr>
+</table>
+
+<c:if test="${count == 0}">
+<table width="700" border="1" cellpadding="0" cellspacing="0">
+  <tr>
+    <td align="center">
+      게시판에 저장된 글이 없습니다.
+    </td>
+  </tr>
+</table>
+</c:if>
+
+<c:if test="${count > 0}">
+<table border="1" width="700" cellpadding="0" cellspacing="0" align="center">
+    <tr height="30" bgcolor="${value_c}">
+      <td align="center"  width="50"  >번 호</td>
+      <td align="center"  width="250" >제   목</td>
+      <td align="center"  width="100" >작성자</td>
+      <td align="center"  width="150" >작성일</td>
+      <td align="center"  width="50" >조 회</td>
+      <td align="center"  width="100" >IP</td>   
+    </tr>
+
+   <c:forEach var="article" items="${articleList}">
+   <tr height="30">
+    <td align="center"  width="50" >
+  <c:out value="${number}"/>
+  <c:set var="number" value="${number - 1}"/>
+</td>
+    <td  width="250" >
+  <c:if test="${article.re_level > 0}">
+  <img src="images/level.gif" width="${5 * article.re_level}" height="16">
+    <img src="images/re.gif">
+  </c:if>
+  <c:if test="${article.re_level == 0}">
+    <img src="images/level.gif" width="${5 * article.re_level}" height="16">
+  </c:if>
+          
+      <a href="/SSOL/MVC/content.do?num=${article.num}&pageNum=${currentPage}">
+          ${article.subject}</a>
+          <c:if test="${article.readcount >= 20}">
+            <img src="images/hot.gif" border="0"  height="16">
+  </c:if>
+</td>
+    <td align="center"  width="100">
+       <a href="mailto:${article.email}">${article.writer}</a>
+</td>
+    <td align="center"  width="150">${article.reg_date}
+</td>
+    <td align="center"  width="50">${article.readcount}</td>
+    <td align="center" width="100" >${article.ip}</td>
+  </tr>
+  </c:forEach>
+</table>
+</c:if>
+
+<c:if test="${count > 0}">
+   <c:set var="pageCount" value="${count / pageSize + ( count % pageSize == 0 ? 0 : 1)}"/>
+   <c:set var="pageBlock" value="${10}"/>
+   <fmt:parseNumber var="result" value="${currentPage / 10}" integerOnly="true" />
+   <c:set var="startPage" value="${result * 10 + 1}" />
+   <c:set var="endPage" value="${startPage + pageBlock-1}"/>
+   <c:if test="${endPage > pageCount}">
+        <c:set var="endPage" value="${pageCount}"/>
+   </c:if>
+         
+   <c:if test="${startPage > 10}">
+        <a href="/SSOL/MVC/list.do?pageNum=${startPage - 10 }">[이전]</a>
+   </c:if>
+
+   <c:forEach var="i" begin="${startPage}" end="${endPage}">
+       <a href="/SSOL/MVC/list.do?pageNum=${i}">[${i}]</a>
+   </c:forEach>
+
+   <c:if test="${endPage < pageCount}">
+        <a href="/SSOL/MVC/list.do?pageNum=${startPage + 10}">[다음]</a>
+   </c:if>
+</c:if>
+
+</center>
+</body>
+</html>
+
+[content.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="color.jspf"%>
+
+<html>
+<head>
+<title>게시판</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+<style type='text/css'>
+<!--
+a:link { color:black; text-decoration:none; }
+a:visited {  }
+a:active { text-decoration:underline; }
+a:hover { text-decoration:underline; background-image:url('text_dottdeline.gif'); background-repeat:repeat-x; background-position:50% 100%; }
+-->
+</style>
+<style>
+<!--
+@font-face {font-family:굴림; src:url();}
+body,td,a,div,p,pre,input,textarea {font-family:굴림;font-size:9pt;}
+-->
+</style>
+</head>
+
+<body bgcolor="${bodyback_c}"> 
+<center><b>글내용 보기</b>
+<br>
+<form>
+<table width="500" border="1" cellspacing="0" cellpadding="0" align="center"> 
+  <tr height="30">
+    <td align="center" width="125" bgcolor="${value_c}">글번호</td>
+    <td align="center" width="125" align="center">${article.num}</td>
+    <td align="center" width="125" bgcolor="${value_c}">조회수</td>
+    <td align="center" width="125" align="center">${article.readcount}</td>
+  </tr>
+  <tr height="30">
+    <td align="center" width="125" bgcolor="${value_c}">작성자</td>
+    <td align="center" width="125" align="center">${article.writer}</td>
+    <td align="center" width="125" bgcolor="${value_c}" >작성일</td>
+    <td align="center" width="125" align="center">${article.reg_date}</td>
+  </tr>
+  <tr height="30">
+    <td align="center" width="125" bgcolor="${value_c}">글제목</td>
+    <td align="center" width="375" align="center" colspan="3">${article.subject}</td>
+  </tr>
+  <tr>
+    <td align="center" width="125" bgcolor="${value_c}">글내용</td>
+    <td align="left" width="375" colspan="3"><pre>${article.content}</pre></td>
+  </tr>
+  <tr height="30">     
+    <td colspan="4" bgcolor="${value_c}" align="right" >
+  <input type="button" value="글수정"
+       onclick="document.location.href='/SSOL/MVC/updateForm.do?num=${article.num}&pageNum=${pageNum}'">
+   &nbsp;&nbsp;&nbsp;&nbsp;
+  <input type="button" value="글삭제"
+       onclick="document.location.href='/SSOL/MVC/deleteForm.do?num=${article.num}&pageNum=${pageNum}'">
+   &nbsp;&nbsp;&nbsp;&nbsp;
+      <input type="button" value="답글쓰기"
+       onclick="document.location.href='/SSOL/MVC/writeForm.do?num=${article.num}&ref=${article.ref}&re_step=${article.re_step}&re_level=${article.re_level}'">
+   &nbsp;&nbsp;&nbsp;&nbsp;
+       <input type="button" value="글목록"
+       onclick="document.location.href='/SSOL/MVC/list.do?pageNum=${pageNum}'">
+    </td>
+  </tr>
+</table>   
+</form>     
+</body>
+</html>     
+
+[updateForm.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="color.jspf"%>
+
+<html>
+<head>
+<title>게시판</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+<script language="JavaScript" src="script.js"></script>
+</head>
+
+<body bgcolor="${bodyback_c}"> 
+<center><b>글수정</b>
+<br>
+<form method="post" name="writeform" action="/SSOL/MVC/updatePro.do?pageNum=${pageNum}" onsubmit="return writeSave()">
+<table width="400" border="1" cellspacing="0" cellpadding="0" align="center">
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center">이 름</td>
+    <td align="left" width="330">
+       <input type="text" size="10" maxlength="10" name="writer" value="${article.writer}">
+   <input type="hidden" name="num" value="${article.num}"></td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center" >제 목</td>
+    <td align="left" width="330">
+       <input type="text" size="40" maxlength="50" name="subject" value="${article.subject}"></td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center">Email</td>
+    <td align="left" width="330">
+       <input type="text" size="40" maxlength="30" name="email" value="${article.email}"></td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center" >내 용</td>
+    <td align="left" width="330">
+     <textarea name="content" rows="13" cols="40">${article.content}</textarea></td>
+  </tr>
+  <tr>
+    <td  width="70"  bgcolor="${value_c}" align="center" >비밀번호</td>
+    <td align="left" width="330" >
+     <input type="password" size="8" maxlength="12" name="passwd">
+</td>
+  </tr>
+  <tr>     
+   <td colspan=2 bgcolor="${value_c}" align="center">
+     <input type="submit" value="글수정" > 
+     <input type="reset" value="다시작성">
+     <input type="button" value="목록보기"
+       onclick="document.location.href='/SSOL/MVC/list.do?pageNum=${pageNum}'">
+   </td>
+</tr>
+</table>
+</form>
+</body>
+</html>     
+
+[updatePro.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+
+<c:if test="${check==1}">
+<meta http-equiv="Refresh" content="0;url=/SSOL/MVC/list.do?pageNum=${pageNum}" >
+</c:if>
+<c:if test="${check==0}">
+비밀번호가 다릅니다.
+<br>
+<a href="javascript:history.go(-1)">[글수정 폼으로 돌아가기]</a>
+</c:if>
+
+[deleteForm.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="color.jspf"%>
+
+<html>
+<head>
+<title>게시판</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+
+<script language="JavaScript">     
+<!--     
+  function deleteSave(){
+if(document.delForm.passwd.value==''){
+alert("비밀번호를 입력하십시요.");
+document.delForm.passwd.focus();
+return false;
+}
+}   
+// -->     
+</script>
+</head>
+
+<body bgcolor="${bodyback_c}">
+<center><b>글삭제</b>
+<br>
+<form method="POST" name="delForm"  action="/SSOL/MVC/deletePro.do?pageNum=${pageNum}"
+   onsubmit="return deleteSave()">
+<table border="1" align="center" cellspacing="0" cellpadding="0" width="360">
+  <tr height="30">
+     <td align=center  bgcolor="${value_c}">
+       <b>비밀번호를 입력해 주세요.</b></td>
+  </tr>
+  <tr height="30">
+     <td align=center >비밀번호 :  
+       <input type="password" name="passwd" size="8" maxlength="12">
+   <input type="hidden" name="num" value="${num}"></td>
+</tr>
+<tr height="30">
+    <td align=center bgcolor="${value_c}">
+      <input type="submit" value="글삭제" >
+      <input type="button" value="글목록"
+       onclick="document.location.href='/SSOL/MVC/list.do?pageNum=${pageNum}'">    
+   </td>
+</tr> 
+</table>
+</form>
+</body>
+</html>
+
+[deletePro.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+
+<c:if test="${check==1}">
+<meta http-equiv="Refresh" content="0;url=/SSOL/MVC/list.do?pageNum=${pageNum}" >
+</c:if>
+<c:if test="${check==0}">
+비밀번호가 다릅니다.
+<br>
+<a href="javascript:history.go(-1)">[글삭제 폼으로 돌아가기]</a>
+</c:if>
+
+*****회원가입 만들기*****
+1.패턴 : Model2(MVC)
+
+
+2.Table : members , zipcode
+   
+3.JavaBean
+  : 저장빈 : soldesk.logon.LogonDataBean, soldesk.logon.ZipcodeBean
+  : 처리빈 : soldesk.logon.LogonDBBean
+
+4.commandHandlerURI.properties 내용 추가
+/logon/main.do=ssol.action.LogonMainAction
+/logon/inputForm.do=ssol.action.LogonInputFormAction
+/logon/inputPro.do=ssol.action.LogonInputProAction
+/logon/confirmId.do=ssol.action.ConfirmIdAction
+/logon/loginForm.do=ssol.action.LoginFormAction
+/logon/loginPro.do=ssol.action.LoginProAction
+/logon/logout.do=ssol.action.LogoutAction
+/logon/modify.do=ssol.action.LogonModifyAction
+/logon/modifyForm.do=ssol.action.LogonModifyFormAction
+/logon/modifyPro.do=ssol.action.LogonModifyProAction
+/logon/deleteForm.do=ssol.action.LogonDeleteFormAction
+/logon/deletePro.do=ssol.action.LogonDeleteProAction
+
+5.Controller
+[ControllerUsingURI2.java]
+package ssol.controller;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.util.HashMap;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.action.CommandAction;
+import ssol.action.NullAction;
+
+public class ControllerUsingURI2 extends HttpServlet {
+   
+    private Map commandMap = new HashMap();//명령어와 명령어 처리 클래스를 쌍으로 저장
+
+    //명령어와 처리클래스가 매핑되어 있는 properties 파일을 읽어서 Map객체인 commandMap에 저장
+    //명령어와 처리클래스가 매핑되어 있는 properties 파일은 Command.properties파일
+    public void init(ServletConfig config) throws ServletException {
+	
+        String props = config.getInitParameter("configFile2");//web.xml에서 propertyConfig에 해당하는 init-param 의 값을 읽어옴
+        Properties pr = new Properties();//명령어와 처리클래스의 매핑정보를 저장할 Properties객체 생성
+        FileInputStream f = null;
+        try {
+            String configFilePath = config.getServletContext().getRealPath(
+					props);		
+            f = new FileInputStream(configFilePath); //Command.properties파일의 내용을 읽어옴
+            pr.load(f);//Command.properties파일의 정보를  Properties객체에 저장
+        } catch (IOException e) {
+            throw new ServletException(e);
+        } finally {
+            if (f != null) try { f.close(); } catch(IOException ex) {}
+        }
+        Iterator keyIter = pr.keySet().iterator();//Iterator객체는 Enumeration객체를 확장시킨 개념의 객체
+        while( keyIter.hasNext() ) {//객체를 하나씩 꺼내서 그 객체명으로 Properties객체에 저장된 객체에 접근
+            String command = (String)keyIter.next();
+            String className = pr.getProperty(command);
+            try {
+                Class commandClass = Class.forName(className);//해당 문자열을 클래스로 만든다.
+                Object commandInstance = commandClass.newInstance();//해당클래스의 객체를 생성
+                commandMap.put(command, commandInstance);// Map객체인 commandMap에 객체 저장
+            } catch (ClassNotFoundException e) {
+                throw new ServletException(e);
+            } catch (InstantiationException e) {
+                throw new ServletException(e);
+            } catch (IllegalAccessException e) {
+                throw new ServletException(e);
+            }
+        }
+    }
+
+    public void doGet(//get방식의 서비스 메소드
+        HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+        requestPro(request, response);
+    }
+
+    protected void doPost(//post방식의 서비스 메소드
+        HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+        requestPro(request, response);
+    }
+
+    //시용자의 요청을 분석해서 해당 작업을 처리
+    private void requestPro(HttpServletRequest request, HttpServletResponse response)
+    throws ServletException, IOException {
+	String view = null;
+        CommandAction com=null;
+	try {
+            String command = request.getRequestURI();
+            if (command.indexOf(request.getContextPath()) == 0) {
+               command = command.substring(request.getContextPath().length());
+            }
+            com = (CommandAction)commandMap.get(command); 
+	    if (com == null) {
+		com = new NullAction();
+	    }
+            view = com.requestPro(request, response);
+        } catch(Throwable e) {
+            throw new ServletException(e);
+        }  
+        RequestDispatcher dispatcher =request.getRequestDispatcher(view);
+        dispatcher.forward(request, response);
+    }
+}
+
+6.Action class
+[CommandAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+//요청 파라미터로 명령어를 전달하는 방식의 슈퍼 인터페이스
+public interface CommandAction {
+    public String requestPro(HttpServletRequest request, HttpServletResponse response)throws Throwable;
+}
+
+[NullAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class NullAction implements CommandAction {
+
+	@Override
+	public String requestPro(HttpServletRequest request,
+			HttpServletResponse response) throws Throwable {
+		return "/view/nullCommand.jsp";
+	}
+
+}
+
+[LogonMainAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import ssol.action.CommandAction;
+
+public class LogonMainAction implements CommandAction {//회원관리메인 페이지
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+
+        return "/logon2/main.jsp";//해당 뷰
+    }
+}
+
+[/WebContent/logon2/main.jsp]
+<%@ page  contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+<html>
+<head><title>메인입니다..</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+</head>
+
+
+<body bgcolor="${bodyback_c}">
+
+<c:if test="${empty sessionScope.memId}">
+
+  <table width=500 cellpadding="0" cellspacing="0"  align="center" border="1" >
+      <tr>
+       <td width="300" bgcolor="${bodyback_c}" height="20">
+       &nbsp;
+       </td>
+   
+       <form name="inform" method="post" action="/SSOL/logon/loginPro.do">
+
+        <td bgcolor="${title_c}"  width="100" align="right">아이디</td>
+        <td width="100" bgcolor="${value_c}">
+            <input type="text" name="id" size="15" maxlength="10"></td>
+      </tr>
+      <tr > 
+         <td rowspan="2" bgcolor="${bodyback_c}" width="300" >메인입니다.</td>
+         <td bgcolor="${title_c}"  width="100" align="right">패스워드</td>
+         <td width="100" bgcolor="${value_c}">
+            <input type="password" name="passwd" size="15" maxlength="10"></td>
+       </tr>
+       <tr>
+          <td colspan="3" bgcolor="${title_c}"   align="center">
+            <input type="submit" name="Submit" value="로그인">
+            <input type="button"  value="회원가입" onclick="document.location.href='/SSOL/logon/inputForm.do'">
+          </td></form></tr></table>
+     </c:if>
+	 <c:if test="${!empty sessionScope.memId}">
+       <table width=500 cellpadding="0" cellspacing="0"  align="center" border="1" >
+         <tr>
+           <td width="300" bgcolor="${bodyback_c}" height="20">하하하</td>
+
+           <td rowspan="3" bgcolor="${value_c}" align="center">
+             ${sessionScope.memId}님이 <br>
+             방문하셨습니다
+             <form  method="post" action="/SSOL/logon/logout.do">  
+             <input type="submit"  value="로그아웃">
+             <input type="button" value="회원정보변경" onclick="document.location.href='/SSOL/logon/modify.do'">
+             </form>
+         </td>
+        </tr>
+       <tr > 
+         <td rowspan="2" bgcolor="${bodyback_c}" width="300" >메인입니다.</td>
+      </tr>
+     </table>
+     <br>
+</c:if>
+ </body>
+</html>
+
+[실행] http://localhost:8080/SSOL/logon/main.do
+
+[LogonInputFormAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import ssol.action.CommandAction;
+
+public class LogonInputFormAction implements CommandAction {//회원가입 폼 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+     
+        return "/logon2/inputForm.jsp";//해당 뷰
+    }
+}
+
+[/WebContent/logon2/inputForm.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+<html>
+<head>
+<title>회원가입</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+<script language="JavaScript">
+    
+    function checkIt() {
+        var userinput = eval("document.userinput");
+        if(!userinput.id.value) {
+            alert("ID를 입력하세요");
+            return false;
+        }
+        
+        if(!userinput.passwd.value ) {
+            alert("비밀번호를 입력하세요");
+            return false;
+        }
+        if(userinput.passwd.value != userinput.passwd2.value)
+        {
+            alert("비밀번호를 동일하게 입력하세요");
+            return false;
+        }
+       
+        if(!userinput.username.value) {
+            alert("사용자 이름을 입력하세요");
+            return false;
+        }
+        if(!userinput.jumin1.value  || !userinput.jumin2.value )
+        {
+            alert("주민등록번호를 입력하세요");
+            return false;
+        }
+    }
+
+    // 아이디 중복 여부를 판단
+    function openConfirmid(userinput) {
+        // 아이디를 입력했는지 검사
+        if (userinput.id.value == "") {
+            alert("아이디를 입력하세요");
+            return;
+        }
+        // url과 사용자 입력 id를 조합합니다.
+        url = "/SSOL/logon/confirmId.do?id=" + userinput.id.value ;
+        
+        // 새로운 윈도우를 엽니다.
+        open(url, "confirm", 
+        "toolbar=no, location=no,status=no,menubar=no,scrollbars=no,resizable=no,width=550, height=200");
+    }
+</script>
+
+
+<body bgcolor="${bodyback_c}">
+
+<form method="post" action="/SSOL/logon/inputPro.do" name="userinput" onSubmit="return checkIt()">
+  <table width="600" border="1" cellspacing="0" cellpadding="3" align="center" >
+    <tr> 
+    <td colspan="2" height="39" align="center" bgcolor="${value_c}" >
+       <font size="+1" ><b>회원가입</b></font></td>
+    </tr>
+    <tr> 
+      <td width="200" bgcolor="${value_c}"><b>아이디 입력</b></td>
+      <td width="400" bgcolor="${value_c}">&nbsp;</td>
+    </tr>  
+
+    <tr> 
+      <td width="200"> 사용자 ID</td>
+      <td width="400"> 
+        <input type="text" name="id" size="10" maxlength="12">
+        <input type="button" name="confirm_id" value="ID중복확인" OnClick="openConfirmid(this.form)">
+      </td>
+    </tr>
+    <tr> 
+      <td width="200"> 비밀번호</td>
+      <td width="400" > 
+        <input type="password" name="passwd" size="15" maxlength="12">
+      </td>
+    <tr>  
+      <td width="200">비밀번호 확인</td>
+      <td width="400"> 
+        <input type="password" name="passwd2" size="15" maxlength="12">
+      </td>
+    </tr>
+    
+    <tr> 
+      <td width="200" bgcolor="${value_c}"><b>개인정보 입력</b></td>
+      <td width="400" bgcolor="${value_c}">&nbsp;</td>
+    <tr>  
+    <tr> 
+      <td width="200">사용자 이름</td>
+      <td width="400"> 
+        <input type="text" name="name" size="15" maxlength="10">
+      </td>
+    </tr>
+    <tr> 
+      <td width="200">주민등록번호</td>
+      <td width="400"> 
+        <input type="text" name="jumin1" size="7" maxlength="6">
+        -<input type="text" name="jumin2" size="7" maxlength="7">
+      </td>
+    </tr>
+    <tr> 
+      <td width="200">E-Mail</td>
+      <td width="400"> 
+        <input type="text" name="email" size="40" maxlength="30">
+      </td>
+    </tr>
+    <tr> 
+      <td width="200"> Blog</td>
+      <td width="400"> 
+        <input type="text" name="blog" size="60" maxlength="50">
+      </td>
+    </tr>
+    <tr> 
+      <td colspan="2" align="center" bgcolor="${value_c}"> 
+          <input type="submit" name="confirm" value="등   록" >
+          <input type="reset" name="reset" value="다시입력">
+          <input type="button" value="가입안함" onclick="document.location.href='/SSOL/logon/main.do'">
+      </td>
+    </tr>
+  </table>
+</form>
+</body>
+</html>
+
+[실행] http://localhost:8080/SSOL/logon/inputForm.do
+
+[LogonInputProAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import java.sql.Timestamp;
+
+import ssol.logon.LogonDataBean;
+import ssol.logon.LogonDBBean;
+import ssol.action.CommandAction;
+
+public class LogonInputProAction implements CommandAction {//회원가입 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)  throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");//한글 인코딩
+        
+        LogonDataBean member = new LogonDataBean();//데이터처리 빈
+	member.setId(request.getParameter("id"));
+        member.setPasswd(request.getParameter("passwd"));
+        member.setName(request.getParameter("name"));
+        member.setJumin1(request.getParameter("jumin1"));
+        member.setJumin2(request.getParameter("jumin2"));
+	member.setEmail(request.getParameter("email"));
+	member.setBlog(request.getParameter("blog"));
+        member.setReg_date(new Timestamp(System.currentTimeMillis()));
+
+        LogonDBBean dbPro = LogonDBBean.getInstance();//DB처리
+        dbPro.insertMember(member);
+
+        return "/logon2/inputPro.jsp";//해당 뷰
+    }
+}
+
+
+[/WebContent/logon2/inputPro.jsp]
+<%@ page contentType="text/html;charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+
+<meta http-equiv="Refresh" content="0;url=/SSOL/logon/loginForm.do" >
+
+[ConfirmIdAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.logon.LogonDBBean;
+import ssol.action.CommandAction;
+
+public class ConfirmIdAction implements CommandAction {// 입력된 글 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)  throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");//한글 인코딩
+        
+        String id = request.getParameter("id");//사용자입력 아이디
+		
+        LogonDBBean dbPro = LogonDBBean.getInstance();//DB처리
+        int check=  dbPro.confirmId(id);
+
+        //해당 뷰에서 사용할 속성
+	request.setAttribute("id", id);
+	request.setAttribute("check", new Integer(check));
+
+        return "/logon2/confirmId.jsp";//해당 뷰
+    }
+}
+
+[/WebContent/logon2/confirmId.jsp]
+<%@ page contentType="text/html;charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%> 
+<html>
+<head><title>ID 중복확인</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+
+
+<body bgcolor="${bodyback_c}">
+<c:if test="${check == 1}"> 
+<table width="270" border="0" cellspacing="0" cellpadding="5">
+  <tr bgcolor="${title_c}"> 
+    <td height="39">${id} 는 이미 사용중인 아이디입니다.</td>
+  </tr>
+</table>
+<form name="checkForm" method="post" action="/SSOL/logon/confirmId.do">
+<table width="270" border="0" cellspacing="0" cellpadding="5">
+  <tr>
+    <td bgcolor="${value_c}" align="center"> 
+       다른 아이디를 선택하세요.<p>
+       <input type="text" size="10" maxlength="12" name="id"> 
+       <input type="submit" value="ID중복확인">
+    </td>
+  </tr>
+</table>
+</form>
+</c:if>
+<c:if test="${check == -1}"> 
+<table width="270" border="0" cellspacing="0" cellpadding="5">
+  <tr bgcolor="${title_c}"> 
+    <td align="center"> 
+      <p>입력하신 ${id} 는 사용하실 수 있는 ID입니다. </p>
+      <input type="button" value="닫기" onclick="setid()">
+    </td>
+  </tr>
+</table>
+</c:if>
+</body>
+</html>
+<script language="javascript">
+<!--
+  function setid()
+    {		
+    	opener.document.userinput.id.value="${id}";
+	self.close();
+   }
+-->
+</script>
+
+[LoginFormAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import ssol.action.CommandAction;
+
+public class LoginFormAction implements CommandAction {//회원인증 폼 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+     
+        return "/logon2/loginForm.jsp";//해당 뷰
+    }
+}
+
+[/WebContent/logon2/loginForm.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+<html>
+<head><title>로그인</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+
+   <script language="javascript">
+     
+       function begin(){
+         document.myform.id.focus();
+       }
+       function checkIt(){
+         if(!document.myform.id.value){
+           alert("이름을 입력하지 않으셨습니다.");
+           document.myform.id.focus();
+           return false;
+         }
+         if(!document.myform.passwd.value){
+           alert("비밀번호를 입력하지 않으셨습니다.");
+           document.myform.passwd.focus();
+           return false;
+         }
+         
+       }
+    
+   </script>
+</head>
+<BODY onload="begin()" bgcolor="${bodyback_c}">
+<form name="myform" action="/SSOL/logon/loginPro.do" method="post" onSubmit="return checkIt()">
+<TABLE cellSpacing=1 cellPadding=1 width="260" border=1 align="center" >
+  
+  <TR height="30">
+    <TD colspan="2" align="middle" bgcolor="${title_c}"><STRONG>회원로그인</STRONG></TD></TR>
+  
+  <TR height="30">
+    <TD width="110" bgcolor="${title_c}" align=center>아이디</TD>
+    <TD width="150" bgcolor="${value_c}" align=center>
+       <INPUT type="text" name="id" size="15" maxlength="12"></TD></TR>
+  <TR height="30">
+    <TD width="110" bgcolor="${title_c}" align=center>비밀번호</TD>
+    <TD width="150" bgcolor="${value_c}" align=center>
+      <INPUT type=password name="passwd"  size="15" maxlength="12"></TD></TR>
+  <TR height="30">
+    <TD colspan="2" align="middle" bgcolor="${title_c}" >
+      <INPUT type=submit value="로그인"> 
+      <INPUT type=reset value="다시입력">
+      <input type="button" value="회원가입" onclick="document.location.href='/SSOL/logon/inputForm.do'"></TD></TR>
+</TABLE>
+</form>
+
+</BODY>
+</HTML>
+
+[실행] http://localhost:8080/SSOL/logon/loginForm.do
+
+[LoginProAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.logon.LogonDBBean;
+import ssol.action.CommandAction;
+
+public class LoginProAction implements CommandAction {//회원인증 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)  throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");//한글 인코딩
+        
+        String id = request.getParameter("id");
+	    String passwd  = request.getParameter("passwd");
+
+        LogonDBBean dbPro = LogonDBBean.getInstance();//DB처리
+        int check=dbPro.userCheck(id,passwd);
+
+        //해당 뷰에서 사용할 속성
+	request.setAttribute("check", new Integer(check));
+	request.setAttribute("id", id);
+
+
+        return "/logon2/loginPro.jsp";//해당 뷰
+    }
+}
+
+
+[/WebContent/logon2/loginPro.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+
+<c:if test="${check==1}">
+    <c:set var="memId" value="${id}" scope="session"/>
+    <meta http-equiv="Refresh" content="0;url=/SSOL/logon/main.do" />
+</c:if>
+<c:if test="${check==0}">
+	<script> 
+	  alert("비밀번호가 맞지 않습니다.");
+      history.go(-1);
+	</script>
+</c:if>
+<c:if test="${check==-1}">
+	<script>
+	  alert("아이디가 맞지 않습니다..");
+	  history.go(-1);
+	</script>
+</c:if>
+
+[LogoutAction.java]
+package ssol.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import ssol.action.CommandAction;
+
+public class LogoutAction implements CommandAction {//로그아웃 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+
+        return "/logon2/logout.jsp";//해당 뷰
+    }
+}
+
+
+[/WebContent/logon2/logout.jsp]
+<%@ page  contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+
+<c:remove var="memId" scope="session"/>
+<meta http-equiv="Refresh" content="0;url=/SSOL/logon/main.do" />
+
+[실행] http://localhost:8080/SSOL/logon/logout.do
+
+[LogonModifyAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import ssol.action.CommandAction;
+
+public class LogonModifyAction implements CommandAction {//회원정보 수정 페이지 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response)throws Throwable {
+
+        return "/logon2/modify.jsp";//해당 뷰
+    }
+}
+
+
+[/WebContent/logon2/modify.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+
+<html>
+<head><title>정보수정</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+</head>
+<body bgcolor="${bodyback_c}">
+ <table width=500 cellpadding="0" cellspacing="0"  align="center" >
+   <tr>
+     <td>
+      <form name="myform" action="/SSOL/logon/modifyForm.do" method="post">
+        <INPUT type="hidden" name="id" value="${sessionScope.memId}">
+	    <INPUT type="submit" value="회원정보 수정">
+      </form>
+	 </td>
+	 <td>
+      <form name="myform" action="/SSOL/logon/deleteForm.do" method="post">
+        <INPUT type="hidden" name="id" value="${sessionScope.memId}">
+        <INPUT type="submit" value="회원 탈퇴">
+      </form>
+	 </td>
+	 <td>
+      <form name="myform" action="/SSOL/logon/main.do" method="post">
+        <INPUT type="submit" value="메인으로">
+      </form>
+	 </td>
+	</tr>
+   </table>
+</body>
+</html>
+
+[실행] http://localhost:8080/SSOL/logon/modify.do
+
+[LogonModifyFormAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.logon.LogonDataBean;
+import ssol.logon.LogonDBBean;
+import ssol.action.CommandAction;
+
+public class LogonModifyFormAction implements CommandAction {//회원정보 수정 폼 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        String id = request.getParameter("id");
+
+        LogonDBBean dbPro = LogonDBBean.getInstance();
+        LogonDataBean member =  dbPro.getMember(id);
+
+		//해당 뷰에서 사용할 속성
+        request.setAttribute("member", member);
+
+        return "/logon2/modifyForm.jsp";//해당뷰
+    }
+}
+
+
+[/WebContent/logon2/modifyForm.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+
+<html>
+<head>
+<title>회원정보수정</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+
+
+<script language="JavaScript">
+   <!-- 
+    function checkIt() {
+        var userinput = eval("document.userinput");
+               
+        if(!userinput.passwd.value ) {
+            alert("비밀번호를 입력하세요");
+            return false;
+        }
+        if(userinput.passwd.value != userinput.passwd2.value)
+        {
+            alert("비밀번호를 동일하게 입력하세요");
+            return false;
+        }
+       
+        if(!userinput.username.value) {
+            alert("사용자 이름을 입력하세요");
+            return false;
+        }
+        if(!userinput.jumin1.value  || !userinput.jumin2.value )
+        {
+            alert("주민등록번호를 입력하세요");
+            return false;
+        }
+    }
+-->
+</script>
+
+<body bgcolor="${bodyback_c}">
+<form method="post" action="/SSOL/logon/modifyPro.do" name="userinput" onsubmit="return checkIt()">
+
+  <table width="600" border="1" cellspacing="0" cellpadding="3"  align="center">
+    <tr > 
+      <td  colspan="2" height="39" bgcolor="${title_c}" align="center">
+	     <font size="+1" ><b>회원 정보수정</b></font></td>
+    </tr>
+    <tr>
+      <td colspan="2" class="normal" align="center">회원의 정보를 수정합니다.</td>
+    </tr>
+     <tr> 
+      <td width="200" bgcolor="${value_c}"><b>아이디 입력</b></td>
+      <td width="400" bgcolor="${value_c}">&nbsp;</td>
+    <tr>  
+
+    <tr> 
+      <td  width="200"> 사용자 ID</td>
+      <td  width="400">${member.id}</td>
+	  <input type="hidden" name="id" value="${sessionScope.memId}">
+    </tr>
+    
+     <tr> 
+      <td width="200"> 비밀번호</td>
+      <td width="400"> 
+        <input type="password" name="passwd" size="10" maxlength="10" value="${member.passwd}">
+      </td>
+    <tr>  
+    <tr> 
+      <td  width="200" bgcolor="${value_c}"><b>개인정보 입력</b></td>
+      <td width="400" bgcolor="${value_c}">&nbsp;</td>
+    <tr>  
+    <tr> 
+      <td   width="200">사용자 이름</td>
+      <td  width="400"> 
+        <input type="text" name="name" size="15" maxlength="20" value="${member.name}">
+      </td>
+    </tr>
+    <tr> 
+      <td width="200">주민등록번호</td>
+      <td width="400"> 
+        ${member.jumin1}-${member.jumin2}
+      </td>
+    </tr>
+   <tr> 
+      <td width="200">E-Mail</td>
+      <td width="400">
+	    <c:if test="${empty member.email }">
+		  <input type="text" name="email" size="40" maxlength="30" >
+		</c:if>
+		<c:if test="${!empty member.email }">
+          <input type="text" name="email" size="40" maxlength="30" value="${member.email}">	
+		</c:if>
+      </td>
+    </tr>
+    <tr> 
+      <td width="200">Blog</td>
+      <td width="400"> 
+	    <c:if test="${empty member.blog}">
+		  <input type="text" name="blog" size="60" maxlength="50" >
+		</c:if>
+		<c:if test="${!empty member.blog}">
+          <input type="text" name="blog" size="60" maxlength="50" value="${member.blog}">
+		</c:if>
+      </td>
+    </tr>      
+    <tr> 
+      <td colspan="2" align="center" bgcolor="${value_c}"> 
+       <input type="submit" name="modify" value="수   정" >
+       <input type="button" value="취  소" onclick="document.location.href='/SSOL/logon/main.do'">      
+      </td>
+    </tr>
+  </table>
+</form>
+</body>
+</html>
+
+[LogonModifyProAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.logon.LogonDataBean;
+import ssol.logon.LogonDBBean;
+import ssol.action.CommandAction;
+
+public class LogonModifyProAction implements CommandAction {//회원정보수정 처리
+
+    public String requestPro( HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");
+
+        String id = request.getParameter("id");
+
+	LogonDataBean member = new LogonDataBean();
+        member.setPasswd(request.getParameter("passwd"));
+        member.setName(request.getParameter("name"));
+        member.setEmail(request.getParameter("email"));
+        member.setBlog(request.getParameter("blog"));
+        member.setId(request.getParameter("id"));
+	    
+        LogonDBBean dbPro = LogonDBBean.getInstance();
+        dbPro.updateMember(member);
+        return "/logon2/modifyPro.jsp";//해당 뷰
+    }
+}
+
+
+[/WebContent/logon2/modifyPro.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+
+<html>
+<head>
+<title>회원정보수정</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+</head>
+<body bgcolor="${bodyback_c}">
+<table width="270" border="0" cellspacing="0" cellpadding="5" align="center">
+  <tr bgcolor="${title_c}"> 
+    <td height="39"  align="center">
+	  <font size="+1" ><b>회원정보가 수정되었습니다.</b></font></td>
+  </tr>
+  <tr>
+    <td bgcolor="${value_c}" align="center"> 
+      <p>입력하신 내용대로 수정이 완료되었습니다.</p>
+    </td>
+  </tr>
+  <tr>
+    <td bgcolor="${value_c}" align="center"> 
+      <form>
+	    <input type="button" value="메인으로" onclick="document.location.href='/study/appendix/logon/main.do'">
+      </form>
+      5초후에 메인으로 이동합니다.<meta http-equiv="Refresh" content="5;url=/SSOL/logon/main.do" >
+    </td>
+  </tr>
+</table>
+</body>
+</html>
+
+
+[LogonDeleteFormAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+import ssol.action.CommandAction;
+
+public class LogonDeleteFormAction implements CommandAction {//회원탈퇴 폼 처리
+
+    public String requestPro(HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        return "/logon2/deleteForm.jsp";//해당뷰
+    }
+}
+
+
+[/WebContent/logon2/deleteForm.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+<html>
+<head><title>회원탈퇴</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+
+   <script language="javascript">
+     <!--
+       function begin(){
+         document.myform.passwd.focus();
+       }
+
+       function checkIt(){
+		  if(!document.myform.passwd.value){
+           alert("비밀번호를 입력하지 않으셨습니다.");
+           document.myform.passwd.focus();
+           return false;
+         }
+	   }   
+     -->
+   </script>
+</head>
+<BODY onload="begin()" bgcolor="${bodyback_c}">
+<form name="myform" action="/SSOL/logon/deletePro.do" method="post" onSubmit="return checkIt()">
+<TABLE cellSpacing=1 cellPadding=1 width="260" border=1 align="center" >
+  
+  <TR height="30">
+    <TD colspan="2" align="middle" bgcolor="${title_c}">
+	  <font size="+1" ><b>회원 탈퇴</b></font></TD></TR>
+     
+  <TR height="30">
+    <TD width="110" bgcolor="${value_c}" align=center>비밀번호</TD>
+    <TD width="150" align=center>
+      <INPUT type="password" name="passwd"  size="15" maxlength="12">
+	  <input type="hidden" name="id" value="${sessionScope.memId}">
+	  </TD></TR>
+  <TR height="30">
+    <TD colspan="2" align="middle" bgcolor="${value_c}" >
+      <INPUT type=submit value="회원탈퇴"> 
+      <input type="button" value="취  소" onclick="document.location.href='/SSOL/logon/main.do'"></TD></TR>
+</TABLE>
+</form>
+</BODY>
+</HTML>
+
+
+[LogonDeleteProAction.java]
+package soldesk.action;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import ssol.logon.LogonDBBean;
+import ssol.action.CommandAction;
+
+public class LogonDeleteProAction implements CommandAction {//회원탈퇴 처리
+
+    public String requestPro( HttpServletRequest request,
+        HttpServletResponse response) throws Throwable {
+
+        request.setCharacterEncoding("euc-kr");
+
+        String id = request.getParameter("id");
+        String passwd = request.getParameter("passwd");
+	    
+        LogonDBBean dbPro = LogonDBBean.getInstance();
+        int check = dbPro.deleteMember(id, passwd);
+
+        //해당 뷰에서 사용할 속성
+        request.setAttribute("check", new Integer(check));
+
+        return "/logon2/deletePro.jsp";//해당뷰
+    }
+}
+
+
+[/WebContent/logon2/deletePro.jsp]
+<%@ page contentType="text/html; charset=euc-kr"%>
+<%@ taglib prefix="c" uri="http://java.sun.com/jsp/jstl/core" %>
+<%@ include file="./color.jspf"%>
+<html>
+<head>
+<title>회원탈퇴</title>
+<link href="style.css" rel="stylesheet" type="text/css">
+</head>
+
+<body bgcolor="${bodyback_c}">
+<c:if test="${check==1}">
+<c:remove var="memId" scope="session"/>
+<form method="post" action="/SSOL/logon/main.do" name="userinput" >
+<table width="270" border="0" cellspacing="0" cellpadding="5" align="center">
+  <tr bgcolor="${title_c}"> 
+    <td height="39" align="center">
+	  <font size="+1" ><b>회원정보가 삭제되었습니다.</b></font></td>
+  </tr>
+  <tr bgcolor="${value_c}">
+    <td align="center"> 
+      <p>흑흑.... 서운합니다. 안녕히 가세요.</p>
+      <meta http-equiv="Refresh" content="5;url=/SSOL/logon/main.do" >
+    </td>
+  </tr>
+  <tr bgcolor="${value_c}">
+    <td align="center"> 
+      <input type="submit" value="확인">
+    </td>
+  </tr>
+</table>
+</form>
+</c:if>
+
+<c:if test="${check==0}">
+	<script> 
+	  alert("비밀번호가 맞지 않습니다.");
+      history.go(-1);
+	</script>
+</c:if>
+
+</body>
+</html>

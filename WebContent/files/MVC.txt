@@ -1,0 +1,378 @@
+***Model2(MVC)패턴***
+JSP : HTML <==== Java
+Servlet : Java <==== HTML
+
+1.간단한 MVC패턴 연습.
+[SimpleController.java]
+package soldesk.mvc;
+
+import java.io.IOException;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class SimpleController extends HttpServlet {
+
+	public void doGet(HttpServletRequest request, 
+			HttpServletResponse response)
+	throws ServletException, IOException {
+		processRequest(request, response);
+	}
+
+	public void doPost(HttpServletRequest request, 
+			HttpServletResponse response)
+	throws ServletException, IOException {
+		processRequest(request, response);
+	}
+	
+	private void processRequest(HttpServletRequest request,
+			HttpServletResponse response)
+			throws IOException, ServletException {
+		// 2단계, 요청 파악
+		// request 객체로부터 사용자의 요청을 파악하는 코드
+		String type = request.getParameter("type");
+		
+		// 3단계, 요청한 기능을 수행한다.
+		// 사용자에 요청에 따라 알맞은 코드
+		Object resultObject = null;
+		if (type == null || type.equals("greeting")) {
+			resultObject = "안녕하세요.";
+		} else if (type.equals("date")) {
+			resultObject = new java.util.Date();
+		} else {
+			resultObject = "Invalid Type";
+		}
+		
+		// 4단계, request나 session에 처리 결과를 저장
+		request.setAttribute("result", resultObject);
+		
+		// 5단계, RequestDispatcher를 사용하여 알맞은 뷰로 포워딩
+		RequestDispatcher dispatcher =
+				   request.getRequestDispatcher("/simpleView.jsp");
+		dispatcher.forward(request, response);
+	}
+}
+
+[web.xml]
+<servlet>
+	<servlet-name>SimpleController</servlet-name>
+	<servlet-class>soldesk.mvc.SimpleController</servlet-class>
+</servlet>
+<servlet-mapping>
+	<servlet-name>SimpleController</servlet-name>
+	<url-pattern>/simple</url-pattern>
+</servlet-mapping>
+
+[/WebContent/simpleView.jsp]
+<%@ page contentType="text/html; charset=euc-kr" %>
+
+<html>
+<head><title>뷰</title></head>
+<body>
+
+결과: <%= request.getAttribute("result") %>
+
+</body>
+</html>
+
+http://localhost:8080/SSOL/simple
+http://localhost:8080/SSOL/simple?type=
+http://localhost:8080/SSOL/simple?type=date
+http://localhost:8080/SSOL/simple?type=greeting
+===============================================
+2.Command 패턴
+6[ControllerUsingFile.java]
+package soldesk.mvc.controller;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.mvc.command.CommandHandler;
+import soldesk.mvc.command.NullHandler;
+
+public class ControllerUsingFile extends HttpServlet {
+
+	// <커맨드, 핸들러인스턴스> 매핑 정보 저장
+	private Map commandHandlerMap = new java.util.HashMap();
+
+	public void init(ServletConfig config) throws ServletException {
+		String configFile = config.getInitParameter("configFile");
+		Properties prop = new Properties();
+		FileInputStream fis = null;
+		try {
+			String configFilePath = config.getServletContext().getRealPath(
+					configFile);
+			fis = new FileInputStream(configFilePath);
+			prop.load(fis);
+		} catch (IOException e) {
+			throw new ServletException(e);
+		} finally {
+			if (fis != null)
+				try {
+					fis.close();
+				} catch (IOException ex) {
+				}
+		}
+		Iterator keyIter = prop.keySet().iterator();
+		while (keyIter.hasNext()) {
+			String command = (String) keyIter.next();
+			String handlerClassName = prop.getProperty(command);
+			try {
+				Class handlerClass = Class.forName(handlerClassName);
+				Object handlerInstance = handlerClass.newInstance();
+				commandHandlerMap.put(command, handlerInstance);
+			} catch (ClassNotFoundException e) {
+				throw new ServletException(e);
+			} catch (InstantiationException e) {
+				throw new ServletException(e);
+			} catch (IllegalAccessException e) {
+				throw new ServletException(e);
+			}
+		}
+	}
+
+	public void doGet(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException {
+		process(request, response);
+	}
+
+	protected void doPost(HttpServletRequest request,
+			HttpServletResponse response) throws ServletException, IOException {
+		process(request, response);
+	}
+
+	private void process(HttpServletRequest request,
+			HttpServletResponse response) throws ServletException, IOException {
+		String command = request.getParameter("cmd");
+		CommandHandler handler = (CommandHandler) commandHandlerMap
+				.get(command);
+		if (handler == null) {
+			handler = new NullHandler();
+		}
+		String viewPage = null;
+		try {
+			viewPage = handler.process(request, response);
+		} catch (Throwable e) {
+			throw new ServletException(e);
+		}
+
+		RequestDispatcher dispatcher = request.getRequestDispatcher(viewPage);
+		dispatcher.forward(request, response);
+	}
+}
+
+5[web.xml]
+<servlet>
+	<servlet-name>ControllerUsingFile</servlet-name>
+	<servlet-class>soldesk.mvc.controller.ControllerUsingFile</servlet-class>
+	<init-param>
+		<param-name>configFile</param-name>
+		<param-value>/WEB-INF/commandHandler.properties</param-value>
+	</init-param>
+</servlet>
+<servlet-mapping>
+	<servlet-name>ControllerUsingFile</servlet-name>
+	<url-pattern>/controllerUsingFile</url-pattern>
+</servlet-mapping>
+
+4[/WEB-INF/commandHandler.properties]
+hello=soldesk.mvc.command.HelloHandler
+
+1[CommandHandler.java]
+package soldesk.mvc.command;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public interface CommandHandler {
+	public String process(HttpServletRequest request,
+			HttpServletResponse response) throws Throwable;
+}
+
+2[HelloHandler.java]
+package soldesk.mvc.command;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.mvc.command.CommandHandler;
+
+public class HelloHandler implements CommandHandler {
+
+	public String process(HttpServletRequest request,
+			HttpServletResponse response) throws Throwable {
+		request.setAttribute("hello", "안녕하세요!");
+		return "/view/hello.jsp";
+	}
+}
+
+3[NullHandler.java]
+package soldesk.mvc.command;
+
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+public class NullHandler implements CommandHandler {
+
+	@Override
+	public String process(HttpServletRequest request,
+			HttpServletResponse response) throws Throwable {
+		return "/view/nullCommand.jsp";
+	}
+}
+
+7[/WebContent/view/hello.jsp]
+<%@ page contentType = "text/html; charset=euc-kr" %>
+<html>
+<head><title>Hello</title></head>
+<body>
+
+<%= request.getAttribute("hello") %>
+
+</body>
+</html>
+
+8[/WebContent/view/nullCommand.jsp]
+<%@ page contentType="text/html; charset=euc-kr" %>
+<html>
+<head><title>에러</title></head>
+<body>
+
+잘못된 요청입니다.
+
+</body>
+</html>
+
+http://localhost:8080/SSOL/controllerUsingFile?cmd=hello
+http://localhost:8080/SSOL/controllerUsingFile
+===============================================
+3.URI 패턴
+3[ControllerUsingURI.java]
+package soldesk.mvc.controller;
+
+import java.io.FileInputStream;
+import java.io.IOException;
+import java.net.URL;
+import java.util.Iterator;
+import java.util.Map;
+import java.util.Properties;
+
+import javax.servlet.RequestDispatcher;
+import javax.servlet.ServletConfig;
+import javax.servlet.ServletException;
+import javax.servlet.http.HttpServlet;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
+
+import soldesk.mvc.command.CommandHandler;
+import soldesk.mvc.command.NullHandler;
+
+public class ControllerUsingURI extends HttpServlet {
+
+	// <커맨드, 핸들러인스턴스> 매핑 정보 저장
+	private Map commandHandlerMap = new java.util.HashMap();
+
+	public void init(ServletConfig config) throws ServletException {
+		String configFile = config.getInitParameter("configFile2");
+		Properties prop = new Properties();
+		FileInputStream fis = null;
+		try {
+			String configFilePath = config.getServletContext().getRealPath(
+					configFile);
+			fis = new FileInputStream(configFilePath);
+			prop.load(fis);
+		} catch (IOException e) {
+			throw new ServletException(e);
+		} finally {
+			if (fis != null)
+				try {
+					fis.close();
+				} catch (IOException ex) {
+				}
+		}
+		Iterator keyIter = prop.keySet().iterator();
+		while (keyIter.hasNext()) {
+			String command = (String) keyIter.next();
+			String handlerClassName = prop.getProperty(command);
+			try {
+				Class handlerClass = Class.forName(handlerClassName);
+				Object handlerInstance = handlerClass.newInstance();
+				commandHandlerMap.put(command, handlerInstance);
+			} catch (ClassNotFoundException e) {
+				throw new ServletException(e);
+			} catch (InstantiationException e) {
+				throw new ServletException(e);
+			} catch (IllegalAccessException e) {
+				throw new ServletException(e);
+			}
+		}
+	}
+
+	public void doGet(HttpServletRequest request, HttpServletResponse response)
+			throws ServletException, IOException {
+		process(request, response);
+	}
+
+	protected void doPost(HttpServletRequest request,
+			HttpServletResponse response) throws ServletException, IOException {
+		process(request, response);
+	}
+
+	private void process(HttpServletRequest request,
+			HttpServletResponse response) throws ServletException, IOException {
+		String command = request.getRequestURI();
+		if (command.indexOf(request.getContextPath()) == 0) {
+			command = command.substring(request.getContextPath().length());
+		}
+		CommandHandler handler = (CommandHandler) commandHandlerMap.get(command);
+		if (handler == null) {
+			handler = new NullHandler();
+		}
+		String viewPage = null;
+		try {
+			viewPage = handler.process(request, response);
+		} catch (Throwable e) {
+			throw new ServletException(e);
+		}
+
+		RequestDispatcher dispatcher = request.getRequestDispatcher(viewPage);
+		dispatcher.forward(request, response);
+	}
+}
+
+2[web.xml]
+<servlet>
+	<servlet-name>ControllerUsingURI</servlet-name>
+	<servlet-class>soldesk.mvc.controller.ControllerUsingURI</servlet-class>
+	<init-param>
+		<param-name>configFile2</param-name>
+		<param-value>
+			/WEB-INF/commandHandlerURI.properties
+		</param-value>
+	</init-param>
+</servlet>
+	
+<servlet-mapping>
+	<servlet-name>ControllerUsingURI</servlet-name>
+	<url-pattern>*.do</url-pattern>
+</servlet-mapping>
+
+1[commandHandlerURI.properties]
+/hello.do=soldesk.mvc.command.HelloHandler
+
+http://localhost:8080/SSOL/hello.do
+http://localhost:8080/SSOL/*.do

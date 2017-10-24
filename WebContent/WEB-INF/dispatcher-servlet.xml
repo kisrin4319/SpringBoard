@@ -25,6 +25,7 @@
        
     <!-- viewResolver -->
       <bean id = "viewResolver" class = "org.springframework.web.servlet.view.InternalResourceViewResolver">
+      		<property name="order" value = "2"></property>
       		<property name="viewClass" value="org.springframework.web.servlet.view.JstlView" /> 
       		<property name="prefix" value = "/WEB-INF/" />
       		<property name="suffix" value = ".jsp" />
@@ -41,9 +42,11 @@
     
     <!--  interceptor -->
     <bean id = "multipartResolver" class = "org.springframework.web.multipart.commons.CommonsMultipartResolver" />
-    
-   
-    
     <bean id = "sessionInterceptor" class = "interceptor.SessionInterceptor" />
 	
+	<bean class = "org.springframework.web.servlet.view.BeanNameViewResolver">
+		<property name ="order" value ="0" />
+	</bean>
+	<bean id = "download" class = "board.view.DownloadView" />	
+		
 </beans>

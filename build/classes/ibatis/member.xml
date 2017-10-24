@@ -6,21 +6,21 @@
 	
 	<select id="selectOneMember" parameterClass="int" resultClass="MemberModel">
 		select idx, member_id, member_pw, member_name, joinDate
-		from member
+		from spring_member
 		where idx = #idx#	
 	</select>
 	
 	<select id="selectAllMember" resultClass="MemberModel">
-		select * from member
+		select * from spring_member
 	</select>
 	
 	<select id="findById" parameterClass="String" resultClass="MemberModel">
-		select idx, member_id, member_pw, member_name, joinDate from member
+		select idx, member_id, member_pw, member_name, joinDate from spring_member
 		where member_id = #member_id#
 	</select>
 	
 	<insert id="insertMember" parameterClass="MemberModel">
-		insert into member(idx,member_id,member_pw,member_name,joinDate) values(memberseq.nextval,#member_id#,#member_pw#,#member_name#,sysdate)
+		insert into spring_member(idx,member_id,member_pw,member_name,joinDate) values(springmemberseq.nextval,#member_id#,#member_pw#,#member_name#,sysdate)
 	</insert>
 
 </sqlMap>
