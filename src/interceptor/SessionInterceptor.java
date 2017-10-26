@@ -8,6 +8,8 @@ import org.springframework.web.servlet.handler.HandlerInterceptorAdapter;
 
 
 public class SessionInterceptor extends HandlerInterceptorAdapter{
+	
+	//controller에 요청이 가기전에 메서드 실행
 	@Override
 	public boolean preHandle(HttpServletRequest request,
 			HttpServletResponse response, Object handler) throws Exception {
@@ -35,10 +37,9 @@ public class SessionInterceptor extends HandlerInterceptorAdapter{
 		//		
 	}
 	
+	//controller 요청 후에 동작
 	@Override
-	public void postHandle(HttpServletRequest request,
-			HttpServletResponse response, Object handler,
-			ModelAndView modelAndView) throws Exception {
+	public void postHandle(HttpServletRequest request, HttpServletResponse response, Object handler, ModelAndView modelAndView) throws Exception {
 	}
 }
 
